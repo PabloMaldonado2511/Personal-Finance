@@ -1,0 +1,6 @@
+*.pdf
+finanzas-respaldo-*.json
+node_modules/
+.DS_Store
+privado/
+muestras/
