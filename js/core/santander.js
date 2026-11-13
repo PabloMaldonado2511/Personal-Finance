@@ -6,7 +6,7 @@ const MESES = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8, 
 const dos = (n) => String(n).padStart(2, '0');
 
 /** '12', 'Oct' | '0ct' | 'OCT', '2026' → '2026-10-12' (o null) */
-function fechaIso(dia, mes, anio) {
+export function fechaIso(dia, mes, anio) {
   // El OCR confunde O/0 y a veces duplica: '0ct', '0Oct', 'N0v'.
   const txt = String(mes).toLowerCase().replace(/0/g, 'o').replace(/1/g, 'l');
   const m = MESES[txt.slice(0, 3)] ?? (txt.length === 4 ? MESES[txt.slice(1)] : undefined);
@@ -21,7 +21,7 @@ function fechaIso(dia, mes, anio) {
 }
 
 /** '$ 1,234.56' | '3376.34' → 123456 (centavos) o null */
-function centavos(texto) {
+export function centavos(texto) {
   const m = String(texto).replace(/\s/g, '').match(/^\$?(\d{1,3}(?:,?\d{3})*)\.(\d{2})$/);
   if (!m) return null;
   return Number(m[1].replace(/,/g, '')) * 100 + Number(m[2]);

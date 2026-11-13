@@ -185,3 +185,155 @@ export async function leerPdf(archivo, onProgreso = () => {}, opciones = {}) {
   avisar('Listo', paginas.length, total, 1);
   return { paginas, totalPaginas: total };
 }
+
+/**
+ * Prepara un screenshot para el OCR: escala de grises y, si el fondo es oscuro
+ * (apps en modo oscuro), lo invierte para dejar texto oscuro sobre fondo claro.
+ */
+function prepararImagen(bitmap, escala = 1) {
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * escala);
+  canvas.height = Math.round(bitmap.height * escala);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = img.data;
+  let suma = 0;
+  for (let p = 0; p < d.length; p += 4) {
+    const g = (d[p] * 299 + d[p + 1] * 587 + d[p + 2] * 114) / 1000;
+    d[p] = d[p + 1] = d[p + 2] = g;
+    suma += g;
+  }
+  const oscuro = suma / (d.length / 4) < 110;
+  if (oscuro) for (let p = 0; p < d.length; p += 4) d[p] = d[p + 1] = d[p + 2] = 255 - d[p];
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
+/**
+ * Dentro de un renglón con letra grande seguida de letra pequeña (p. ej. «$13,919» y
+ * «.33» en GBM), localiza la parte pequeña del extremo derecho.
+ * @returns {{x:number,y:number,w:number,h:number}|null}
+ */
+function colaPequena(canvas, z) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const alto = z.y1 - z.y0;
+  const x0 = Math.max(0, z.x0 - 10);
+  const y0 = Math.max(0, z.y0 - Math.round(alto * 0.2));
+  const w = Math.min(canvas.width, z.x1 + (z.extraDerecha ?? 0)) - x0;
+  const h = Math.min(canvas.height, z.y1 + Math.round(alto * 0.2)) - y0;
+  if (w <= 0 || h <= 0) return null;
+  const d = ctx.getImageData(x0, y0, w, h).data;
+  const tope = new Int32Array(w).fill(-1);
+  const fondo = new Int32Array(w).fill(-1);
+  let arriba = h, abajo = 0;
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      if (d[(y * w + x) * 4] < 150) {
+        if (tope[x] < 0) tope[x] = y;
+        fondo[x] = y;
+      }
+    }
+    if (tope[x] >= 0) { arriba = Math.min(arriba, tope[x]); abajo = Math.max(abajo, fondo[x]); }
+  }
+  const H = abajo - arriba;
+  if (H <= 0) return null;
+  const limite = arriba + H * 0.3; // lo que empieza por debajo de esto es letra pequeña
+  let fin = -1, ini = -1, blancos = 0;
+  for (let x = w - 1; x >= 0; x--) {
+    if (tope[x] < 0) {
+      if (fin >= 0 && ++blancos > H * 0.5) break; // hueco grande: terminó el grupo
+      continue;
+    }
+    if (tope[x] < limite) break; // llegó a la letra grande
+    blancos = 0;
+    if (fin < 0) fin = x;
+    ini = x;
+  }
+  if (fin < 0 || fin - ini < 4) return null;
+  const m = Math.round(H * 0.12);
+  const rx = Math.max(0, ini - m);
+  return { x: x0 + rx, y: y0 + Math.max(0, Math.round(limite) - m), w: Math.min(w, fin + m) - rx, h: Math.min(h, abajo + m) - Math.max(0, Math.round(limite) - m) };
+}
+
+/**
+ * Lee un screenshot (PNG/JPG) y devuelve sus líneas de texto.
+ * @param {File|Blob} archivo
+ * @param {(p: {etapa: string, pagina: number, total: number, fraccion: number}) => void} [onProgreso]
+ * @returns {Promise<{ lineas: string[], zonas: {id: string, texto: string}[], ancho: number, alto: number }>}
+ */
+export async function leerImagen(archivo, onProgreso = () => {}, opciones = {}) {
+  const avisar = (etapa, fraccion) => {
+    try { onProgreso({ etapa, pagina: 0, total: 0, fraccion }); } catch { /* sin efecto */ }
+  };
+  avisar('Preparando lector', 0);
+  const Tesseract = await cargarTesseract();
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(archivo);
+  } catch {
+    throw new Error('No se pudo abrir la imagen.');
+  }
+  // Los screenshots de iPhone miden ~1200 px de ancho; se normaliza a ese tamaño.
+  const escala = opciones.escala ?? Math.min(2, Math.max(0.5, 1290 / bitmap.width));
+  const canvas = prepararImagen(bitmap, escala);
+  const ancho = bitmap.width;
+  const alto = bitmap.height;
+  bitmap.close?.();
+
+  const worker = await Tesseract.createWorker('spa', 1, {
+    workerPath: LIBS.tesseractWorker,
+    corePath: LIBS.tesseractCore,
+    langPath: LIBS.idiomas,
+    logger: (m) => { if (m.status === 'recognizing text') avisar('Leyendo imagen', m.progress); },
+  });
+  try {
+    await worker.setParameters({
+      tessedit_pageseg_mode: String(opciones.psm ?? 6),
+      preserve_interword_spaces: '1',
+    });
+    const { data } = await worker.recognize(canvas, {}, { text: true, blocks: true });
+    const renglones = [];
+    for (const b of data.blocks ?? []) {
+      for (const par of b.paragraphs ?? []) {
+        for (const l of par.lines ?? []) {
+          const texto = (l.text || '').trim();
+          if (texto) renglones.push({ texto, caja: l.bbox });
+        }
+      }
+    }
+    const lineas = renglones.length
+      ? renglones.map((r) => r.texto)
+      : data.text.split('\n').map((l) => l.trim()).filter(Boolean);
+
+    // Segunda pasada: zonas con cifras en letra pequeña (p. ej. los centavos en GBM)
+    // se recortan, se amplían y se leen como un solo renglón.
+    const zonas = [];
+    const pedidas = opciones.zonas?.(renglones) ?? [];
+    if (pedidas.length) {
+      await worker.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '0123456789.' });
+      for (const z of pedidas) {
+        const r = colaPequena(canvas, z);
+        if (!r) { zonas.push({ id: z.id, texto: '' }); continue; }
+        const f = 4;
+        const rec = document.createElement('canvas');
+        rec.width = r.w * f + 120;
+        rec.height = r.h * f + 120;
+        const rc = rec.getContext('2d');
+        rc.fillStyle = '#fff';
+        rc.fillRect(0, 0, rec.width, rec.height);
+        rc.imageSmoothingQuality = 'high';
+        rc.drawImage(canvas, r.x, r.y, r.w, r.h, 60, 60, r.w * f, r.h * f);
+        const res = await worker.recognize(rec);
+        zonas.push({ id: z.id, texto: res.data.text.trim() });
+        rec.width = rec.height = 0;
+      }
+    }
+    canvas.width = canvas.height = 0;
+    avisar('Listo', 1);
+    return { lineas, zonas, ancho, alto };
+  } finally {
+    await worker.terminate();
+  }
+}

@@ -168,3 +168,58 @@ La validación compara lo leído contra «Total de cargos» y «Total de abonos�
    Estados ya importados (con opción de borrar). Lugar reservado «Screenshots (próximamente)».
 4. **Capital** — efectivo + inversiones − deuda de tarjetas; alta/edición de saldos; historial.
 5. **Ajustes** — exportar/importar respaldo JSON, reglas aprendidas, borrar todo.
+
+## Ampliación: cuenta de débito, traspasos y saldos desde screenshots
+
+### Cambios en tipos
+
+```js
+Movimiento.tipo   // se añade 'traspaso': dinero que se mueve entre cuentas propias
+                  // (pago de tarjeta desde débito, envío a otra cuenta propia, retiro de caja de
+                  // ahorro). NO es ingreso ni gasto: se excluye de resultados igual que 'pago_tarjeta'.
+                  // Categoría asociada: 'traspaso'.
+
+Estado.tipoCuenta // 'credito' | 'debito'
+// En débito: saldoInicial y saldoFinal (centavos); totalCargos = retiros, totalAbonos = depósitos;
+// fechaLimitePago, pagoNoIntereses y saldoDeudorTotal son null.
+// Al guardar un estado de débito se registra un Saldo clase 'efectivo' con saldoFinal.
+
+Saldo = {
+  id, fecha, clase, nombre, monto,
+  // clase: 'efectivo' | 'inversion' | 'deuda' | 'negocio'
+  //   'negocio' = dinero de un negocio; se muestra aparte y NO suma al capital.
+  fuente,      // opcional: identificador estable de la cuenta leída de un screenshot
+               //   ('didi', 'nu-cajita', 'cetes', 'gbm-<contrato>'). Agrupa el historial
+               //   aunque el usuario cambie el nombre.
+  origen,      // opcional: 'manual' | 'captura'
+  posiciones,  // opcional: [{ nombre, titulos, monto }]  (portafolio GBM)
+  nota         // opcional
+}
+
+ImportacionSaldos = {          // resultado de leer uno o varios screenshots, AÚN NO guardado
+  tipo: 'saldos',
+  saldos: [SaldoPropuesto],
+  noReconocidas: [{ archivo, motivo }]
+}
+SaldoPropuesto = Saldo + {
+  etiquetaFuente,   // texto para mostrar: 'GBM · contrato BKX00000', 'DiDi Cuenta', …
+  archivos,         // string[] nombres de los screenshots de donde salió
+  validacion,       // { cuadra: true | false | null, mensaje }  (null = no hay con qué validar)
+  avisos            // string[]
+}
+```
+
+### API
+
+```js
+// js/core/importar.js
+importarPdf(file, onProgreso)            // ahora reconoce tarjeta de crédito Y cuenta de débito Santander
+importarCapturas(files, onProgreso)      // File[] de imágenes → ImportacionSaldos
+                                         // onProgreso({ etapa, pagina: i (1..n), total: n, fraccion })
+guardarCapturas(saldosPropuestos)        // guarda la lista (ya editada por el usuario) como Saldos
+
+// js/core/calc.js
+capital(saldos, fecha)                   // añade `negocio` al resultado; capital NO lo incluye
+```
+Al leer un screenshot, clase y nombre se proponen así: si ya existe un Saldo guardado con la misma
+`fuente`, se reutilizan su clase y su nombre (lo que el usuario eligió la vez anterior).

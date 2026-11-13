@@ -20,6 +20,7 @@ export const CATEGORIAS = [
   { id: 'intereses',        nombre: 'Intereses y comisiones',   color: '#b04a4a', icono: '🏦' },
   { id: 'otros',            nombre: 'Otros',                    color: '#8a94a6', icono: '🏷️' },
   { id: 'ingreso',          nombre: 'Ingreso',                  color: '#3fb950', icono: '💰' },
+  { id: 'traspaso',         nombre: 'Traspaso entre cuentas',   color: '#6b7a90', icono: '🔄' },
 ];
 
 /** Mayúsculas, sin acentos, espacios colapsados. Clave de comparación. */

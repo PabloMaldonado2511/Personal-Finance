@@ -4,7 +4,8 @@ import * as calc from '../core/calc.js';
 import { moneda, aCentavos, fechaCorta, mesLargo } from '../core/fmt.js';
 import { esc, abrirHoja, confirmar, toast, hoyISO, centavosATexto, crearGrafica, colorTema, abreviar } from './util.js';
 
-const CLASES = { efectivo: 'Efectivo', inversion: 'Inversiones', deuda: 'Deuda de tarjetas' };
+const CLASES = { efectivo: 'Efectivo', inversion: 'Inversiones', negocio: 'Negocio', deuda: 'Deuda de tarjetas' };
+const CLASES_FORM = { efectivo: 'Efectivo', inversion: 'Inversión', negocio: 'Negocio (no cuenta en tu capital)', deuda: 'Deuda' };
 
 function abrirSaldo(s, refrescar) {
   const nuevo = !s;
@@ -12,7 +13,7 @@ function abrirSaldo(s, refrescar) {
   const h = abrirHoja({
     titulo: nuevo ? 'Nuevo saldo' : 'Editar saldo',
     cuerpo: `<form id="f-saldo" novalidate>
-      <label class="campo"><span>Clase</span><select id="s-clase">${Object.entries(CLASES)
+      <label class="campo"><span>Clase</span><select id="s-clase">${Object.entries(CLASES_FORM)
         .map(([k, t]) => `<option value="${k}"${k === v.clase ? ' selected' : ''}>${esc(t)}</option>`)
         .join('')}</select></label>
       <label class="campo"><span>Nombre</span><input id="s-nombre" type="text" value="${esc(v.nombre)}" placeholder="Cuenta débito, GBM…" autocomplete="off"></label>
@@ -58,27 +59,42 @@ export async function render(el, { refrescar }) {
 
   el.innerHTML = `
     <header class="cab"><h1>Capital</h1>
-      <button type="button" class="btn btn-primario" id="nuevo-saldo">Agregar saldo</button></header>
+      <div class="acciones acciones-izq cab-acciones">
+        <a class="btn" href="#importar">Importar desde screenshot</a>
+        <button type="button" class="btn btn-primario" id="nuevo-saldo">Agregar saldo</button></div></header>
     <section class="hero"><span class="etq">Capital total</span>
       <span class="hero-cifra ${clase}">${moneda(c.capital)}</span>
       <div class="desglose">
         <div><span class="etq">Efectivo</span><strong>${moneda(c.efectivo)}</strong></div>
         <div><span class="etq">Inversiones</span><strong>${moneda(c.inversiones)}</strong></div>
         <div><span class="etq">Deuda de tarjetas</span><strong class="neg">−${moneda(c.deuda)}</strong></div>
+        ${c.negocio > 0 ? `<div><span class="etq">Negocio (aparte)</span><strong>${moneda(c.negocio)}</strong></div>` : ''}
       </div>
       <p class="texto-suave">La deuda de tarjetas se actualiza sola al importar estados de cuenta.</p></section>
     <div class="rejilla-2"><div class="col">
       ${Object.entries(CLASES)
         .map(([k, t]) => {
           const g = grupo(k);
-          return `<section class="panel"><h2>${esc(t)}</h2>${
+          const total = g.reduce((acc, d) => acc + d.monto, 0);
+          return `<section class="panel"><h2>${esc(t)}${k === 'negocio' && g.length ? ` · ${moneda(total)}` : ''}</h2>${
+            k === 'negocio' ? '<p class="texto-suave">No cuenta en tu capital.</p>' : ''
+          }${
             g.length
               ? `<ul class="lista">${g
-                  .map(
-                    (d) => `<li><button type="button" class="fila fila-enlace" data-saldo="${esc(d.id)}">
+                  .map((d) => {
+                    const pos = Array.isArray(d.posiciones) ? d.posiciones : [];
+                    return `<li><button type="button" class="fila fila-enlace" data-saldo="${esc(d.id)}">
                 <span class="fila-txt"><strong>${esc(d.nombre)}</strong><small>al ${esc(fechaCorta(d.fecha))}</small></span>
-                <span class="fila-monto ${k === 'deuda' ? 'neg' : ''}">${k === 'deuda' ? '−' : ''}${moneda(d.monto)}</span></button></li>`
-                  )
+                <span class="fila-monto ${k === 'deuda' ? 'neg' : ''}">${k === 'deuda' ? '−' : ''}${moneda(d.monto)}</span></button>${
+                  pos.length
+                    ? `<details class="posiciones"><summary>Ver posiciones (${pos.length})</summary><ul class="lista">${pos
+                        .map(
+                          (x) => `<li class="fila"><span class="fila-txt"><strong>${esc(x.nombre)}</strong><small>${esc(x.titulos)} títulos</small></span><span class="fila-monto">${moneda(x.monto)}</span></li>`
+                        )
+                        .join('')}</ul></details>`
+                    : ''
+                }</li>`;
+                  })
                   .join('')}</ul>`
               : '<p class="texto-suave">Sin saldos registrados.</p>'
           }</section>`;

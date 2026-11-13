@@ -221,3 +221,23 @@ progress { width: 100%; height: 10px; accent-color: var(--acento); }
 .barra-fija-in { max-width: 960px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 10px; justify-content: flex-end; }
 .barra-fija-in .btn { flex: 1; max-width: 200px; }
 .revision { padding-bottom: 96px; }
+
+/* Screenshots, saldos, negocio */
+.chip-ok { --c: var(--pos); color: var(--pos); }
+.saldos-lista { display: flex; flex-direction: column; gap: 12px; padding-bottom: 8px; }
+.saldo-card { background: var(--superficie-2); border-radius: 12px; padding: 12px; }
+.saldo-cab { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.saldo-cab > span { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.saldo-val { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0; }
+.saldo-val small { color: var(--texto-suave); }
+.saldo-campos { margin-top: 8px; grid-template-columns: 1fr 1fr; }
+.saldo-campos .campo:first-child { grid-column: 1 / -1; }
+@media (min-width: 800px) { .saldo-campos { grid-template-columns: 2fr 1.5fr 1fr 1fr; } .saldo-campos .campo:first-child { grid-column: auto; } }
+.sin-barra { padding-bottom: 16px; }
+.posiciones { margin: 0 0 8px; font-size: 0.9rem; }
+.posiciones summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; color: var(--texto-suave); }
+.cab-acciones { margin-top: 0; }
+.tarjeta-enlace { text-decoration: none; color: inherit; }
+.tarjeta-enlace:hover { border-color: var(--acento); }
+.tarjetas + .tarjetas { margin-top: 0; }
+.col > .tarjetas { margin-bottom: 0; }

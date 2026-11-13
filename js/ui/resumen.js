@@ -52,6 +52,8 @@ function htmlRecurrentes(movs, mes) {
 
 export async function render(el, { refrescar }) {
   const movs = await db.listarMovimientos();
+  const saldos = await db.listarSaldos();
+  const cap = saldos.length ? calc.capital(saldos) : null;
   const meses = calc.mesesDisponibles(movs);
   if (!meses.length) {
     el.innerHTML = `<header class="cab"><h1>Resumen</h1></header>${estadoVacio({
@@ -79,6 +81,14 @@ export async function render(el, { refrescar }) {
       </div></header>
     <div class="rejilla-2">
       <div class="col">
+        ${
+          cap
+            ? `<section class="tarjetas" aria-label="Capital">
+          <a class="tarjeta tarjeta-enlace" href="#capital"><span class="etq">Capital</span><span class="cifra ${cap.capital < 0 ? 'neg' : ''}">${moneda(cap.capital)}</span></a>
+          ${cap.negocio > 0 ? `<a class="tarjeta tarjeta-enlace tarjeta-chica" href="#capital"><span class="etq">Negocio</span><span class="cifra">${moneda(cap.negocio)}</span><small class="texto-suave">aparte de tu capital</small></a>` : ''}
+        </section>`
+            : ''
+        }
         <section class="tarjetas" aria-label="Resumen del mes">
           <div class="tarjeta"><span class="etq">Ingresos</span><span class="cifra pos">${moneda(er.ingresos)}</span></div>
           <div class="tarjeta"><span class="etq">Gastos</span><span class="cifra neg">${moneda(er.gastos)}</span></div>

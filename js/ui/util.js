@@ -51,8 +51,9 @@ export function opcionesCategoria(seleccionada, { conIngreso = true, extra = '' 
 export const ETIQUETA_TIPO = {
   gasto: 'Gasto',
   devolucion: 'Devolución',
-  pago_tarjeta: 'Pago de tarjeta',
   ingreso: 'Ingreso',
+  pago_tarjeta: 'Pago de tarjeta',
+  traspaso: 'Traspaso',
 };
 
 export function opcionesTipo(seleccionado) {

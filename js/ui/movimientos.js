@@ -10,7 +10,7 @@ import {
 const filtros = { mes: undefined, categoria: '', cuenta: '', texto: '' };
 
 function monto(m) {
-  if (m.tipo === 'pago_tarjeta') return `<span class="fila-monto tenue">${moneda(m.monto)}</span>`;
+  if (m.tipo === 'pago_tarjeta' || m.tipo === 'traspaso') return `<span class="fila-monto tenue">${moneda(m.monto)}</span>`;
   const pos = m.tipo === 'ingreso' || m.tipo === 'devolucion';
   return `<span class="fila-monto ${pos ? 'pos' : 'neg'}">${pos ? '+' : '−'}${moneda(m.monto)}</span>`;
 }
@@ -29,14 +29,16 @@ function htmlLista(movs) {
       (dia) => `<section class="dia"><h3>${esc(fechaCorta(dia))}</h3><ul class="lista">${porDia
         .get(dia)
         .map(
-          (m) => `<li><button type="button" class="mov${m.tipo === 'pago_tarjeta' ? ' atenuado' : ''}" data-id="${esc(m.id)}">
+          (m) => `<li><button type="button" class="mov${m.tipo === 'pago_tarjeta' || m.tipo === 'traspaso' ? ' atenuado' : ''}" data-id="${esc(m.id)}">
             <span class="mov-main">
               <strong>${esc(m.comercio || m.descripcion)}</strong>
               ${m.descripcion && m.descripcion !== m.comercio ? `<small class="mov-desc">${esc(m.descripcion)}</small>` : ''}
               <span class="mov-meta"><span class="cuenta">${esc(m.cuenta)}</span>${
                 m.tipo === 'pago_tarjeta'
                   ? '<span class="etiqueta">Pago de tarjeta (no cuenta como gasto)</span>'
-                  : chipCat(m.categoria)
+                  : m.tipo === 'traspaso'
+                    ? '<span class="etiqueta">Traspaso (no cuenta como gasto ni ingreso)</span>'
+                    : chipCat(m.categoria)
               }${m.msi ? '<span class="etiqueta">MSI</span>' : ''}${m.tipo === 'devolucion' ? '<span class="etiqueta">Devolución</span>' : ''}</span>
               ${m.nota ? `<small class="mov-nota">${esc(m.nota)}</small>` : ''}
             </span>${monto(m)}</button></li>`
@@ -154,10 +156,12 @@ function abrirEdicion(m, refrescar) {
     const tipo = q('#e-tipo').value;
     let categoria = q('#e-cat').value;
     if (tipo === 'ingreso') categoria = 'ingreso';
+    else if (tipo === 'traspaso') categoria = 'traspaso';
+    else if (tipo === 'gasto' && (categoria === 'ingreso' || categoria === 'traspaso')) categoria = 'otros';
     try {
       await db.guardarMovimiento({ ...m, tipo, monto: centavos, fecha: q('#e-fecha').value, nota: q('#e-nota').value.trim() });
       if (categoria !== m.categoria) {
-        await db.reclasificar(m.id, categoria, { recordar: q('#e-recordar').checked && tipo !== 'ingreso' });
+        await db.reclasificar(m.id, categoria, { recordar: q('#e-recordar').checked && tipo !== 'ingreso' && tipo !== 'traspaso' });
       }
       h.cerrar();
       toast('Movimiento actualizado', 'ok');
@@ -189,6 +193,7 @@ function abrirCaptura(refrescar, cuentasExistentes) {
         <div class="seg seg-ancho" role="group" aria-label="Tipo">
           <button type="button" data-t="gasto" aria-pressed="true">Gasto</button>
           <button type="button" data-t="ingreso" aria-pressed="false">Ingreso</button>
+          <button type="button" data-t="traspaso" aria-pressed="false">Traspaso</button>
         </div>
         <label class="campo"><span>Monto</span><input id="n-monto" inputmode="decimal" placeholder="0.00" autocomplete="off"></label>
         <label class="campo"><span>Fecha</span><input id="n-fecha" type="date" value="${hoyISO()}"></label>
@@ -213,7 +218,7 @@ function abrirCaptura(refrescar, cuentasExistentes) {
     b.addEventListener('click', () => {
       tipo = b.dataset.t;
       h.el.querySelectorAll('[data-t]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-      q('#n-cat-campo').hidden = tipo === 'ingreso';
+      q('#n-cat-campo').hidden = tipo !== 'gasto';
     })
   );
   q('#n-cuenta').addEventListener('change', (e) => {
@@ -230,7 +235,7 @@ function abrirCaptura(refrescar, cuentasExistentes) {
     if (cuenta === '__otra') cuenta = q('#n-otra').value.trim();
     if (!cuenta) return error('Indica el nombre de la cuenta.');
     try {
-      let categoria = 'ingreso';
+      let categoria = tipo === 'traspaso' ? 'traspaso' : 'ingreso';
       let comercio = desc;
       if (tipo === 'gasto') {
         categoria = q('#n-cat').value;

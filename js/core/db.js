@@ -195,7 +195,8 @@ export async function existeEstado(id) {
 
 /**
  * Guarda estado + movimientos en una sola transacción. Si el estado ya existía,
- * primero borra sus movimientos. Registra el Saldo de deuda 'deuda-<estadoId>'.
+ * primero borra sus movimientos. Registra el Saldo del estado con id 'deuda-<estadoId>'
+ * (clase 'deuda' para tarjetas de crédito, 'efectivo' para cuentas de débito).
  * Devuelve { estadoId, movimientos } (número de movimientos guardados).
  */
 export async function guardarImportacion(importacion) {
@@ -213,12 +214,14 @@ export async function guardarImportacion(importacion) {
   const t = await tx(['movimientos', 'estados', 'saldos'], 'readwrite');
   const storeMovs = t.objectStore('movimientos');
   t.objectStore('estados').put(est);
+  // Tarjeta de crédito → saldo de deuda; cuenta de débito → saldo en efectivo.
+  const esDebito = est.tipoCuenta === 'debito';
   t.objectStore('saldos').put({
     id: 'deuda-' + est.id,
     fecha: est.fechaCorte,
-    clase: 'deuda',
+    clase: esDebito ? 'efectivo' : 'deuda',
     nombre: est.cuenta,
-    monto: est.saldoDeudorTotal,
+    monto: esDebito ? est.saldoFinal : est.saldoDeudorTotal,
   });
   // Inserta solo cuando el cursor terminó de borrar (si no, borraría los nuevos)
   borrarMovsDeEstado(storeMovs, est.id, () => {

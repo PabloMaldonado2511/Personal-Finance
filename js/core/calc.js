@@ -147,26 +147,29 @@ export function topCategoriasRecurrentes(movs, { desde, hasta, limite = 10 } = {
 }
 
 /**
- * Capital a una fecha: por cada (clase, nombre) toma el saldo más reciente ≤ fecha.
+ * Capital a una fecha: por cada cuenta toma el saldo más reciente ≤ fecha. Una cuenta se
+ * identifica por su `fuente` (saldos leídos de screenshots) o, si no tiene, por (clase, nombre).
  * capital = efectivo + inversiones − deuda.
+ * La clase 'negocio' (dinero de un negocio, no disponible) se reporta aparte y NO suma al capital.
  */
 export function capital(saldos, fecha = hoyIso()) {
   const ultimos = new Map();
   for (const s of saldos || []) {
     if (!s || !s.fecha || s.fecha > fecha) continue;
-    const k = `${s.clase}\u0000${s.nombre}`;
+    const k = s.fuente ? `f\u0000${s.fuente}` : `${s.clase}\u0000${s.nombre}`;
     const prev = ultimos.get(k);
     if (!prev || s.fecha >= prev.fecha) ultimos.set(k, s);
   }
-  let efectivo = 0, inversiones = 0, deuda = 0;
+  let efectivo = 0, inversiones = 0, deuda = 0, negocio = 0;
   const detalle = [...ultimos.values()].sort((a, b) =>
     String(a.clase).localeCompare(String(b.clase)) || String(a.nombre).localeCompare(String(b.nombre)));
   for (const s of detalle) {
     if (s.clase === 'efectivo') efectivo += s.monto;
     else if (s.clase === 'inversion') inversiones += s.monto;
     else if (s.clase === 'deuda') deuda += s.monto;
+    else if (s.clase === 'negocio') negocio += s.monto;
   }
-  return { efectivo, inversiones, deuda, capital: efectivo + inversiones - deuda, detalle };
+  return { efectivo, inversiones, deuda, negocio, capital: efectivo + inversiones - deuda, detalle };
 }
 
 /** Capital al cierre de cada mes, desde el primer saldo hasta el último (ascendente). */
